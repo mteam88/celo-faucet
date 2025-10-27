@@ -1,15 +1,19 @@
-use crate::jsonrpc::JsonRpcClient;
 use crate::store::Store;
-use crate::tx::TxBuilder;
-use alloy_primitives::{Address, U256};
+use alloy::network::TransactionBuilder;
+use alloy::primitives::{Address, U256};
+use alloy::providers::{Provider, ProviderBuilder};
+use alloy::rpc::types::TransactionRequest;
+use alloy::signers::local::PrivateKeySigner;
 use anyhow::{anyhow, Context, Result};
+use url::Url;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 pub struct FaucetService {
-    rpc: JsonRpcClient,
-    tx_builder: TxBuilder,
+    rpc_url: String,
+    signer: PrivateKeySigner,
+    chain_id: u64,
     store: Arc<Store>,
     amount_wei: U256,
     send_mutex: Arc<Mutex<()>>,
@@ -23,14 +27,16 @@ impl FaucetService {
         amount_wei: &str,
         store: Arc<Store>,
     ) -> Result<Self> {
-        let rpc = JsonRpcClient::new(rpc_url);
-        let tx_builder = TxBuilder::new(private_key, chain_id)?;
+        let signer = private_key
+            .parse::<PrivateKeySigner>()
+            .context("Failed to parse FAUCET_PRIVATE_KEY")?;
         let amount_wei =
             U256::from_str_radix(amount_wei, 10).context("Failed to parse FAUCET_AMOUNT_WEI")?;
 
         Ok(Self {
-            rpc,
-            tx_builder,
+            rpc_url,
+            signer,
+            chain_id,
             store,
             amount_wei,
             send_mutex: Arc::new(Mutex::new(())),
@@ -38,7 +44,7 @@ impl FaucetService {
     }
 
     pub fn faucet_address(&self) -> Address {
-        self.tx_builder.faucet_address()
+        self.signer.address()
     }
 
     #[tracing::instrument(skip(self), fields(to = %to_address))]
@@ -59,60 +65,35 @@ impl FaucetService {
         // Acquire mutex to serialize sends and avoid nonce races
         let _guard = self.send_mutex.lock().await;
 
-        let faucet_addr = self.tx_builder.faucet_address();
-        let faucet_addr_str = format!("{:?}", faucet_addr);
+        let faucet_addr = self.faucet_address();
 
-        // Fetch nonce
-        let nonce = self
-            .rpc
-            .get_transaction_count(&faucet_addr_str)
-            .await
-            .context("Failed to get transaction count")?;
+        // Build alloy provider with local wallet and recommended fillers
+        let provider = ProviderBuilder::new()
+            .wallet(self.signer.clone())
+            .connect_http(self.rpc_url.parse::<Url>().unwrap()); 
 
-        // Fetch gas price
-        let gas_price = self
-            .rpc
-            .get_gas_price()
-            .await
-            .context("Failed to get gas price")?;
+        // Compose minimal transaction request; fillers will set nonce/gas/chain id
+        let tx = TransactionRequest::default()
+            .with_from(faucet_addr)
+            .with_to(to)
+            .with_chain_id(self.chain_id)
+            .with_value(self.amount_wei);
 
-        // Estimate gas
-        let gas_limit = self
-            .rpc
-            .estimate_gas(
-                &faucet_addr_str,
-                &format!("{:?}", to),
-                &format!("{:#x}", self.amount_wei),
-            )
-            .await
-            .context("Failed to estimate gas")?;
-
-        info!(
-            "Building transaction: nonce={}, gas_price={}, gas_limit={}",
-            nonce, gas_price, gas_limit
-        );
-
-        // Build and sign transaction
-        let raw_tx = self
-            .tx_builder
-            .build_and_sign(to, self.amount_wei, nonce, gas_price, gas_limit)
-            .await
-            .context("Failed to build and sign transaction")?;
-
-        // Send transaction
-        let tx_hash = self
-            .rpc
-            .send_raw_transaction(&raw_tx)
+        // Send via provider; returns tx hash
+        let builder = provider
+            .send_transaction(tx)
             .await
             .context("Failed to send transaction")?;
 
-        info!("Transaction sent: {}", tx_hash);
+        let receipt = builder.get_receipt().await?;
 
+        info!("Transaction receipt: {:?}", receipt);
+        
         // Mark address as received
         self.store
-            .mark_received(&to.to_string())
-            .context("Failed to mark address as received")?;
-
-        Ok(tx_hash)
+        .mark_received(&to.to_string())
+        .context("Failed to mark address as received")?;
+        
+        Ok(format!("0x{:x}", receipt.transaction_hash))
     }
 }

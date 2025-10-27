@@ -1,11 +1,9 @@
 mod config;
 mod faucet;
 mod http;
-mod jsonrpc;
 mod logging;
 mod store;
 mod telegram;
-mod tx;
 
 use anyhow::Result;
 use std::sync::Arc;
@@ -53,10 +51,10 @@ async fn main() -> Result<()> {
 
     // Start HTTP server
     let router = http::create_router(faucet_service);
-    
+
     use salvo::conn::TcpListener;
     use salvo::Listener;
-    
+
     let acceptor = TcpListener::new(&config.bind_addr).bind().await;
 
     info!("HTTP server listening on {}", config.bind_addr);

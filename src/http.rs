@@ -82,8 +82,16 @@ struct ServiceInjector {
 
 #[async_trait::async_trait]
 impl Handler for ServiceInjector {
-    async fn handle(&self, _req: &mut Request, depot: &mut Depot, _res: &mut Response, _ctrl: &mut FlowCtrl) {
+    async fn handle(
+        &self,
+        _req: &mut Request,
+        depot: &mut Depot,
+        _res: &mut Response,
+        _ctrl: &mut FlowCtrl,
+    ) {
         depot.insert("faucet_service", self.service.clone());
+        // Continue to the next handlers in the chain
+        _ctrl.call_next(_req, depot, _res).await;
     }
 }
 
