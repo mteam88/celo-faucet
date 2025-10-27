@@ -55,7 +55,7 @@ async fn message_handler(
     faucet_service: Arc<FaucetService>,
 ) -> ResponseResult<()> {
     if let Some(text) = msg.text() {
-        let tg_user_id = msg.from().map(|u| u.id.0 as i64).unwrap_or_default();
+        let tg_user_id = msg.from.as_ref().map(|u| u.id.0 as i64).unwrap_or_default();
         let address = text.trim();
 
         // Basic validation that it looks like an address
