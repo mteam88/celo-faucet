@@ -100,13 +100,12 @@ pub fn create_router(faucet_service: Arc<FaucetService>) -> Router {
         .hoop(ServiceInjector {
             service: faucet_service,
         })
+        // Serve only index.html at root
+        .push(Router::with_path("/").get(StaticFile::new("web/index.html")))
         .push(Router::with_path("/faucet").post(faucet_handler))
         .push(Router::with_path("/healthz").get(healthz_handler))
+        // Serve only assets under /dist/* from web/dist
         .push(
-            Router::with_path("<**path>").get(
-                StaticDir::new(["web/dist"])
-                    .defaults("index.html")
-                    .auto_list(false),
-            ),
+            Router::with_path("/dist/<**path>").get(StaticDir::new(["web/dist"]).auto_list(false)),
         )
 }
