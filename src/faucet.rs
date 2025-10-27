@@ -5,10 +5,10 @@ use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
 use anyhow::{anyhow, Context, Result};
-use url::Url;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
+use url::Url;
 
 pub struct FaucetService {
     rpc_url: String,
@@ -47,6 +47,10 @@ impl FaucetService {
         self.signer.address()
     }
 
+    pub fn store(&self) -> &Store {
+        &self.store
+    }
+
     #[tracing::instrument(skip(self), fields(to = %to_address))]
     pub async fn send_native(&self, to_address: &str) -> Result<String> {
         // Validate address
@@ -70,7 +74,7 @@ impl FaucetService {
         // Build alloy provider with local wallet and recommended fillers
         let provider = ProviderBuilder::new()
             .wallet(self.signer.clone())
-            .connect_http(self.rpc_url.parse::<Url>().unwrap()); 
+            .connect_http(self.rpc_url.parse::<Url>().unwrap());
 
         // Compose minimal transaction request; fillers will set nonce/gas/chain id
         let tx = TransactionRequest::default()
@@ -88,12 +92,12 @@ impl FaucetService {
         let receipt = builder.get_receipt().await?;
 
         info!("Transaction receipt: {:?}", receipt);
-        
+
         // Mark address as received
         self.store
-        .mark_received(&to.to_string())
-        .context("Failed to mark address as received")?;
-        
+            .mark_received(&to.to_string())
+            .context("Failed to mark address as received")?;
+
         Ok(format!("0x{:x}", receipt.transaction_hash))
     }
 }

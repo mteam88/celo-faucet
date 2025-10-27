@@ -55,6 +55,7 @@ async fn message_handler(
     faucet_service: Arc<FaucetService>,
 ) -> ResponseResult<()> {
     if let Some(text) = msg.text() {
+        let tg_user_id = msg.from().map(|u| u.id.0 as i64).unwrap_or_default();
         let address = text.trim();
 
         // Basic validation that it looks like an address
@@ -67,15 +68,31 @@ async fn message_handler(
             return Ok(());
         }
 
+        // Enforce per-user single claim
+        if faucet_service
+            .store()
+            .has_telegram_user(tg_user_id)
+            .unwrap_or(false)
+        {
+            bot.send_message(
+                msg.chat.id,
+                "❌ You've already received tokens from this faucet.",
+            )
+            .await?;
+            return Ok(());
+        }
+
         bot.send_message(msg.chat.id, "Processing your request... ⏳")
             .await?;
 
         match faucet_service.send_native(address).await {
             Ok(tx_hash) => {
+                // Mark telegram user as served
+                let _ = faucet_service.store().mark_telegram_user(tg_user_id);
                 bot.send_message(
                     msg.chat.id,
                     format!(
-                        "✅ Tokens sent successfully!\n\nTransaction hash:\n`{}`",
+                        "✅ Tokens sent successfully\\!\n\nTransaction hash:\n`{}`",
                         tx_hash
                     ),
                 )

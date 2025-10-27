@@ -25,5 +25,19 @@ impl Store {
         self.db.insert(key, timestamp.as_bytes())?;
         Ok(())
     }
-}
 
+    pub fn has_telegram_user(&self, user_id: i64) -> Result<bool> {
+        let key = format!("tg:{}", user_id);
+        Ok(self.db.contains_key(key)?)
+    }
+
+    pub fn mark_telegram_user(&self, user_id: i64) -> Result<()> {
+        let key = format!("tg:{}", user_id);
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)?
+            .as_secs()
+            .to_string();
+        self.db.insert(key, timestamp.as_bytes())?;
+        Ok(())
+    }
+}
