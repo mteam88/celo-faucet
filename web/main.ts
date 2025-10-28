@@ -219,7 +219,7 @@ function showSuccess(message: string, txHash: string) {
   messageDiv.className = "message success";
   messageDiv.innerHTML = `
     <strong>✓ ${message}</strong>
-    <div class="tx-hash">Transaction: <a href="https://celo.blockscout.com/tx/${txHash}" target="_blank" rel="noopener noreferrer">${txHash}</a></div>
+    <div class="tx-hash">Transaction: ${txHash}</div>
   `;
   messageDiv.style.display = "block";
 }
