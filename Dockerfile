@@ -9,7 +9,7 @@ RUN npm run build
 # Stage 2: Build the backend
 FROM rust:1-slim AS backend-builder
 WORKDIR /app
-RUN apt-get update && apt-get install -y build-essential
+RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev
 COPY . .
 RUN cargo build --release --locked
 
