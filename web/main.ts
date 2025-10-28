@@ -19,7 +19,7 @@ let mouseX = 0;
 let mouseY = 0;
 
 const markImg = new Image();
-markImg.src = "/Mark.svg"; // same origin asset
+markImg.src = "/assets/Mark.svg"; // corrected asset path
 
 function resize() {
   width = window.innerWidth;
@@ -53,8 +53,9 @@ function draw() {
 
   if (markImg.complete) {
     const tile = 220;
-    const diag = Math.hypot(width, height);
     const offset = (t * 120) % tile;
+    // cover the rotated corners fully to avoid edge pop-in/out
+    const pad = Math.ceil(Math.hypot(width, height));
 
     ctx.save();
     // rotate canvas so the pattern scrolls top-left to bottom-right
@@ -63,10 +64,12 @@ function draw() {
     ctx.rotate(angle);
     ctx.translate(-width / 2, -height / 2);
 
-    const startX = -tile + -offset + (mouseX - width / 2) * 0.02;
-    const startY = -tile + -offset + (mouseY - height / 2) * 0.02;
-    for (let x = startX; x < width + tile; x += tile) {
-      for (let y = startY; y < height + tile; y += tile) {
+    const parallaxX = (mouseX - width / 2) * 0.02;
+    const parallaxY = (mouseY - height / 2) * 0.02;
+    const startX = -pad - tile - offset + parallaxX;
+    const startY = -pad - tile - offset + parallaxY;
+    for (let x = startX; x < width + pad + tile; x += tile) {
+      for (let y = startY; y < height + pad + tile; y += tile) {
         // subtle scale pulse
         const pulse = 1 + Math.sin((x + y) * 0.01 + t * 4) * 0.04;
         const size = 160 * pulse;
