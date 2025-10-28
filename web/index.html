@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spire Celo Self Demo Faucet</title>
-    <link rel="icon" href="data:," />
+    <link rel="icon" href="/favicon.ico" />
     <style>
       * {
         margin: 0;
@@ -338,16 +338,14 @@
               type="text"
               id="address"
               name="address"
-              placeholder="under construction"
+              placeholder="0x..."
               required
               pattern="^0x[a-fA-F0-9]{40}$"
               autocomplete="off"
               spellcheck="false"
-              disabled
             />
-            <div class="footer-note">under construction</div>
           </div>
-          <button type="submit" id="submitBtn" disabled>Request Tokens</button>
+          <button type="submit" id="submitBtn">Request Tokens</button>
         </form>
         <div
           id="message"
