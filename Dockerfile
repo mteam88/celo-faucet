@@ -16,6 +16,9 @@ RUN cargo build --release --locked
 # Stage 3: Create the final image
 FROM debian:12-slim
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=backend-builder /app/target/release/celo-faucet /usr/local/bin/
 COPY --from=frontend-builder /app/web/dist ./web/dist
 COPY --from=frontend-builder /app/web/assets ./web/assets
