@@ -17,6 +17,14 @@ let height = 0;
 let t = 0;
 let mouseX = 0;
 let mouseY = 0;
+let lastTime = performance.now();
+let pointerInside = false;
+
+type TileState = {
+  angle: number;
+  velocity: number; // radians per second
+};
+const tileStates = new Map<string, TileState>();
 
 const markImg = new Image();
 markImg.src = "/assets/Mark.svg"; // corrected asset path
@@ -35,11 +43,21 @@ window.addEventListener("resize", resize);
 window.addEventListener("pointermove", (e) => {
   mouseX = e.clientX;
   mouseY = e.clientY;
+  pointerInside = true;
+});
+window.addEventListener("pointerleave", () => {
+  pointerInside = false;
 });
 
 function draw() {
   if (!ctx) return;
-  t += 0.006;
+  const now = performance.now();
+  let dt = (now - lastTime) / 1000;
+  lastTime = now;
+  // clamp dt for tab-jump safety, normalize to 60 FPS
+  dt = Math.min(dt, 1 / 15);
+  const dt60 = dt * 60;
+  t += 0.006 * dt60;
   ctx.clearRect(0, 0, width, height);
 
   // Parallax background gradient
@@ -53,7 +71,8 @@ function draw() {
 
   if (markImg.complete) {
     const tile = 220;
-    const offset = (t * 120) % tile;
+    const scroll = t * 120; // monotonically increasing
+    const offset = scroll % tile; // used only for drawing positions
     // cover the rotated corners fully to avoid edge pop-in/out
     const pad = Math.ceil(Math.hypot(width, height));
 
@@ -68,13 +87,63 @@ function draw() {
     const parallaxY = (mouseY - height / 2) * 0.02;
     const startX = -pad - tile - offset + parallaxX;
     const startY = -pad - tile - offset + parallaxY;
+
+    // determine hovered tile using world indices (stable across scroll)
+    let hoverWx = Number.NaN;
+    let hoverWy = Number.NaN;
+    if (pointerInside) {
+      const cx = width / 2;
+      const cy = height / 2;
+      const cosInv = Math.cos(-angle);
+      const sinInv = Math.sin(-angle);
+      const dx = mouseX - cx;
+      const dy = mouseY - cy;
+      const prx = dx * cosInv - dy * sinInv + cx; // pointer in rotated frame
+      const pry = dx * sinInv + dy * cosInv + cy;
+      hoverWx = Math.floor((prx - parallaxX + scroll) / tile);
+      hoverWy = Math.floor((pry - parallaxY + scroll) / tile);
+    }
+
+    const visibleKeys = new Set<string>();
+    const damping = Math.pow(0.985, dt60); // velocity damping
+    const targetSpin = 0.8; // rad/s when hovered
+    const accelBlend = 0.12; // approach factor per 60fps frame
     for (let x = startX; x < width + pad + tile; x += tile) {
       for (let y = startY; y < height + pad + tile; y += tile) {
+        const wx = Math.floor((x - parallaxX + scroll) / tile);
+        const wy = Math.floor((y - parallaxY + scroll) / tile);
+        const key = `${wx},${wy}`;
+        visibleKeys.add(key);
+        let state = tileStates.get(key);
+        if (!state) {
+          state = { angle: 0, velocity: 0 };
+          tileStates.set(key, state);
+        }
+
+        // physics update: accelerate toward target spin when hovered, otherwise damp
+        if (wx === hoverWx && wy === hoverWy && pointerInside) {
+          state.velocity += (targetSpin - state.velocity) * accelBlend * dt60;
+        } else {
+          state.velocity *= damping;
+        }
+        state.angle += state.velocity * dt60;
         // subtle scale pulse
         const pulse = 1 + Math.sin((x + y) * 0.01 + t * 4) * 0.04;
         const size = 160 * pulse;
         ctx.globalAlpha = 0.1 + (Math.sin(x * y * 0.00004 + t * 2) + 1) * 0.06;
-        ctx.drawImage(markImg, x, y, size, size);
+        // draw rotated by current persistent angle
+        ctx.save();
+        ctx.translate(x + size / 2, y + size / 2);
+        ctx.rotate(state.angle);
+        ctx.drawImage(markImg, -size / 2, -size / 2, size, size);
+        ctx.restore();
+      }
+    }
+
+    // cleanup states that are no longer visible to avoid unbounded growth
+    if (tileStates.size > 800) {
+      for (const k of tileStates.keys()) {
+        if (!visibleKeys.has(k)) tileStates.delete(k);
       }
     }
     ctx.restore();
