@@ -53,6 +53,9 @@ async fn main() -> Result<()> {
     let router = http::create_router(faucet_service);
 
     use salvo::conn::TcpListener;
+    use salvo::cors::{AllowOrigin, Cors};
+    use salvo::http::Method;
+    use salvo::prelude::Service;
     use salvo::Listener;
 
     let acceptor = TcpListener::new(&config.bind_addr).bind().await;
@@ -60,7 +63,23 @@ async fn main() -> Result<()> {
     info!("HTTP server listening on {}", config.bind_addr);
     info!("Web UI available at http://{}", config.bind_addr);
 
-    salvo::Server::new(acceptor).serve(router).await;
+    // Enable CORS for all origins (handles OPTIONS preflight automatically when applied to Service).
+    // https://salvo.rs/guide/features/cors.html#allowing-all-origins
+    let cors = Cors::new()
+        .allow_origin(AllowOrigin::any())
+        .allow_methods(vec![
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers(vec!["content-type", "authorization"])
+        .into_handler();
+
+    let service = Service::new(router).hoop(cors);
+    salvo::Server::new(acceptor).serve(service).await;
 
     Ok(())
 }
